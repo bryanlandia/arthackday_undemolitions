@@ -1,13 +1,22 @@
 import copy
 import json
+import logging
+import re
+import urllib
 
 import scrapy
+from scrapy import loader
 
 from demolition import settings
+from demolition import items
 
 
 NEWSBANKHEADERS = {
     "Host": "infoweb.newsbank.com.ezproxy.spl.org:2048"
+}
+
+JSON_REQ_HEADERS = {
+    "Accept": "text/javascript, application/javascript, */*"
 }
 
 NEWSBANKCOOKIES = {
@@ -15,9 +24,11 @@ NEWSBANKCOOKIES = {
     "bc_username": "bryancwilson",
     "bc_language": "en-US",
     "bc_barcode": "1000010466257",
-    "ezproxy": "QPgiIBokzx5nNK7",
+    "ezproxy": "fCmTiRcjErjLRxU",
     "has_js": "1",
 }
+
+log = logging.getLogger(__name__)
 
 
 class SeattleTimesSpider(scrapy.Spider):
@@ -73,22 +84,112 @@ class SeattleTimesSpider(scrapy.Spider):
     def start_requests(self):
         requests = []
         for site in self.sites:
-            # search 
             addresses = self._make_address_variants(site['address'])
-            for address_variant in addresses:                
-                qry = "&val0=%22{0}%22".format(address_variant)
-                req = scrapy.Request(url=self.base_url+qry,
-                                    headers=NEWSBANKHEADERS,
-                                    cookies=NEWSBANKCOOKIES)
-                requests.append(req)
-        return [requests[0]]
+            for address_variant in addresses:
+                try:
+                    log.info('\n\n\nqueuing request for {}\n\n\n'.format(address_variant))
+                    qry = "&val0=%22{0}%22".format(address_variant)                    
+                    req = scrapy.Request(url=self.base_url+qry,
+                                        headers=NEWSBANKHEADERS,
+                                        cookies=NEWSBANKCOOKIES,
+                                        meta={"address": site['address'],
+                                              "lat": site['location']['latitude'],
+                                              "lon": site['location']['longitude'],
+                                              "address_variant": address_variant 
+                                        })
+                    requests.append(req)
+
+                except KeyError:
+                    log.info('no lat/lon for site:{}'.format(site['address']))
+                    continue
+
+        return requests
 
     def parse(self, response):
         """
         do something with the response
         """
-        import pdb; pdb.set_trace()
-        fn = settings.SPIDERS_OUT_FILES[self.name]
-        with open(fn, 'w') as f:
-            pass
-            f  # pylint
+
+        i = loader.ItemLoader(item=items.DemolitionItem(), response=response)
+        i.replace_xpath('text', '//div[@class="preview"]//text()')
+        i.replace_value('address', response.meta["address"])
+        # i.add_value('address_variant', response.meta["address_variant"])
+        i.replace_value('lat', response.meta["lat"])
+        i.replace_value('lon', response.meta["lon"])
+        # if '701 N' in response.meta["address"]:
+        #     import pdb; pdb.set_trace()
+        item = i.load_item()
+        item['image_url'] = []
+
+        snippets = i.get_xpath("//div[@class='snippet']/text()") 
+        if len(snippets):
+            # import pdb; pdb.set_trace()
+            snip_meta = {
+                'item': item,
+                'snippets': snippets,
+                'search_response': response
+            }
+            snip_req = self.get_snippet_req(response, snippets[0], snip_meta)  # call the first of chained snippet requests
+            
+            return snip_req
+        else:
+            self.write_item_to_json(item)
+                
+    def get_snippet_req(self, response, snip_id, meta):
+        """
+        snippet images (small preview images of print newspaper scans)
+        are loaded via XHR and not available in the response but can be gotten 
+        with subrequests
+        """
+        base_url = "http://infoweb.newsbank.com.ezproxy.spl.org:2048/resources/SiteLinks/xmlquery/snippets/getsnippets.jsonp?rem=platform_v1_drupal&dbmode=imggroupid&jsonp=jsonp1474097742990&"
+        # beyond base_url, need userid (ip address), snippet
+        # snippet is from text() content of the div.snippet
+        try:
+            # import pdb; pdb.set_trace()
+            userid = re.search(r"var snippet_userid='(.*)'", response.body).group(1)
+            qry = "userid={}&{}&searchterms={}".format(userid, snip_id, urllib.quote_plus(response.meta["address_variant"]))
+            HEADERS = copy.deepcopy(NEWSBANKHEADERS)
+            HEADERS.update(JSON_REQ_HEADERS)
+            snip_req = scrapy.Request(url=base_url+qry,
+                                       headers=HEADERS,
+                                       cookies=NEWSBANKCOOKIES,
+                                       callback=self.parse_snippet_xhr,
+                                       meta=meta
+                                       )
+            return snip_req
+        except AttributeError:
+            # import pdb; pdb.set_trace()
+            return 
+        
+    def parse_snippet_xhr(self, response):
+        """ update the item and chain the next snippet request if
+            necessary
+        """
+        # import pdb; pdb.set_trace()
+        item = response.meta['item']
+        snippets = response.meta['snippets']
+        gif_url = "http"+re.search(r'http(.*)\.gif"', response.body).group(1)+".gif"
+        item['image_url'].append(gif_url)
+        snippets.pop(0)
+        if len(response.meta['snippets']):
+            resp = response.meta['search_response']
+            snip_req = self.get_snippet_req(resp, snippets[0], response.meta)  # call the first of chained snippet requests
+            if snip_req:
+                snip_req.meta['item'] = item
+                snip_req.meta['snippets'] = snippets
+                return snip_req
+            else:
+                self.write_item_to_json()
+        else:
+            # we're done!
+            self.write_item_to_json(item)
+
+    def write_item_to_json(self, item):
+        if item.get('text', None) or item.get('image_url', None):
+            # import pdb; pdb.set_trace()
+            fn = '/opt/arthackerasure/data/out/{}'.format(settings.SPIDERS_OUTPUT_FILES[self.name])
+            save_item = {item["address"][0]:dict(item)}
+            with open(fn, 'w') as f:
+                f.write(json.dumps(save_item))
+        else:
+            log.info('nothing found in Seattle Times for {}'.format(item['address']))

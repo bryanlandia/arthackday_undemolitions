@@ -15,4 +15,5 @@ class DemolitionItem(scrapy.Item):
     lon = scrapy.Field()
     text = scrapy.Field()
     image_url = scrapy.Field()
+    news_date = scrapy.Field()
 
