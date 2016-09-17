@@ -1,30 +1,76 @@
-{"ave ": [
+{"street_types": {
+
+
+ "ST": [
+   "st",
+   "st.",
+   "St",
+   "Str.",
+   "street",
+   "Street",
+   "ST"
+ ],
+
+ "AVE" : [
 	"ave",
 	"Av.",
 	"Av",
-	"Avenue"
-],
-"sw": [
-	"sw",
-	"S. W. ",
-	"S.W."
-],
-"nw": [
-	"nw",
-	"N. W. ",
-	"N.W."
-],
-"ne": [
-	"ne",
-	"N. E. ",
-	"S.W."
-],
-"se": [
-	"se",
-	"S. E. ",
-	"S.E."
+	"Avenue",
+	"AV",
+	"AVE"
 ],
 
+"BLVD": [
+	"blvd",
+	"Blvd",
+	"blvd.",
+	"Bvd",
+    "Bvd.",
+    "BLVD"
+],
 
-	
+"PL": [
+	"pl",
+	"place",
+    "PL"
+],
+
+"CT": [
+	"ct",
+	"COURT",
+    "court",
+    "ct.",
+    "CT"
+
+]
+
+},
+
+"directions": {
+	"SW": [
+		"sw",
+		"S. W.",
+		"S.W.",
+		"SW"
+	],
+	"NW": [
+		"nw",
+		"N. W.",
+		"N.W.",
+		"NW"
+	],
+	"NE": [
+		"ne",
+		"N. E.",
+		"N.E.",
+		"NE"
+	],
+	"NW": [
+		"se",
+		"S. E.",
+		"S.E.",
+		"SE"
+	]
+	}
+
 }

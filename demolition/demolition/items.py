@@ -9,11 +9,10 @@ import scrapy
 
 
 class DemolitionItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
+    # we can have duplicates for given address, lat, lon
     address = scrapy.Field()
     lat = scrapy.Field()
     lon = scrapy.Field()
     text = scrapy.Field()
     image_url = scrapy.Field()
-    
+
