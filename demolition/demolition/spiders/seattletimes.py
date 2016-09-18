@@ -6,10 +6,17 @@ import urllib
 
 import scrapy
 from scrapy import loader
+import requests
 
 from demolition import settings
 from demolition import items
 
+
+PROJECT_BASE_PATH = settings.PROJECT_BASE_PATH
+AUTH_USER_FIELD = 'user'
+AUTH_PASS_FIELD = 'pass'
+AUTH_PROXY_URL = 'https://login.ezproxy.spl.org/login?url=http://infoweb.newsbank.com/resources/search/nb?'
+# AUTH_PROXY_URL = 'https://login.ezproxy.spl.org/login'
 
 NEWSBANKHEADERS = {
     "Host": "infoweb.newsbank.com.ezproxy.spl.org:2048"
@@ -19,13 +26,15 @@ JSON_REQ_HEADERS = {
     "Accept": "text/javascript, application/javascript, */*"
 }
 
+with open('{}/auth.json'.format(PROJECT_BASE_PATH)) as authf:
+    auth = json.load(authf)
+
 NEWSBANKCOOKIES = {
-    "bc_session": "f12eedff-7690-48d1-8d6a-9c3f82f7ba66",
-    "bc_username": "bryancwilson",
+    "bc_username": auth['bc_username'],
     "bc_language": "en-US",
-    "bc_barcode": "1000010466257",
-    "ezproxy": "fCmTiRcjErjLRxU",
-    "has_js": "1",
+    "bc_barcode": auth['bc_barcode'],
+    "ezproxy": "",
+    "has_js": "0",
 }
 
 log = logging.getLogger(__name__)
@@ -35,18 +44,34 @@ class SeattleTimesSpider(scrapy.Spider):
     """
     scrape Seattle Times, Seattle Daily Times online
     at NewsBank.com
-    needs credentials from Seattle Public Library
+    needs credentials from Seattle Public Library or other subscription to NewsBank service
     """
     name = "demolition_seattletimes"
     base_url = "http://infoweb.newsbank.com.ezproxy.spl.org:2048/resources/search/nb?p=AMNEWS&b=results&action=search&t=state%3AWA%21USA%2B-%2BWashington%2Fpubname%3A127D718D1E33F961%7CSTIW%21Multiple%2BPublications&fld0=alltext&bln1=AND&fld1=YMD_date&val1=&sort=_rank_%3AD"
     # query = "&val0=%227500+35TH+AV%22"
 
-    with open('/opt/arthackerasure/data/seattlegov/demolitions.json', 'r') as demos:
+    with open('{}/data/seattlegov/demolitions.json'.format(PROJECT_BASE_PATH), 'r') as demos:
         sites = json.load(demos)
 
-    with open('/opt/arthackerasure/subs.json', 'r') as subs:
+    with open('{}/subs.json'.format(PROJECT_BASE_PATH), 'r') as subs:
         address_subs = json.load(subs)
 
+    with open('{}/data/out/{}'.format(PROJECT_BASE_PATH, settings.SPIDERS_OUTPUT_FILES[name])) as donef:
+        # not properly formatted JSON so can't do json.load()
+        done_str = donef.read()
+
+    def _make_auth(self):
+        """
+        retrieve up to date auth cookies: `bc_session` and `ezproxy`
+        no return value, just side effect set cookie dict fields
+        """
+        login_data = {
+            AUTH_USER_FIELD: auth['bc_username'], AUTH_PASS_FIELD: auth['spl_pin'],
+            'url': 'http://infoweb.newsbank.com/resources/search/nb?p=AMNEWS&t=state%3AWA!USA%2B-%2BWashington' 
+        }
+        login_resp = requests.post(AUTH_PROXY_URL, login_data)
+
+        NEWSBANKCOOKIES['ezproxy'] = re.search(r"ezproxy=(.*)(;)?", login_resp.request.headers['Cookie']).group(1)
 
     def _make_address_variants(self, address):
         """ 
@@ -82,8 +107,11 @@ class SeattleTimesSpider(scrapy.Spider):
         return variants_final
 
     def start_requests(self):
+        self._make_auth()
         requests = []
         for site in self.sites:
+            if site['address'] in self.done_str:
+                continue
             addresses = self._make_address_variants(site['address'])
             for address_variant in addresses:
                 try:
@@ -111,19 +139,23 @@ class SeattleTimesSpider(scrapy.Spider):
         """
 
         i = loader.ItemLoader(item=items.DemolitionItem(), response=response)
-        i.replace_xpath('text', '//div[@class="preview"]//text()')
+        i.add_xpath('text', '//div[@class="preview"]//text()')        
+        pubmeta = i.get_xpath('//div[contains(@class, "pubmeta")]/text()')
+        for pm in pubmeta:
+            try:
+                pubdate = re.search(r"-(.*)", pm).group(1)
+                i.add_value('news_date', pubdate)
+            except AttributeError:
+                pass
         i.replace_value('address', response.meta["address"])
         # i.add_value('address_variant', response.meta["address_variant"])
         i.replace_value('lat', response.meta["lat"])
         i.replace_value('lon', response.meta["lon"])
-        # if '701 N' in response.meta["address"]:
-        #     import pdb; pdb.set_trace()
         item = i.load_item()
         item['image_url'] = []
 
-        snippets = i.get_xpath("//div[@class='snippet']/text()") 
+        snippets = i.get_xpath("//div[@class='snippet']/text()")
         if len(snippets):
-            # import pdb; pdb.set_trace()
             snip_meta = {
                 'item': item,
                 'snippets': snippets,
@@ -132,7 +164,7 @@ class SeattleTimesSpider(scrapy.Spider):
             snip_req = self.get_snippet_req(response, snippets[0], snip_meta)  # call the first of chained snippet requests
             
             return snip_req
-        else:
+        else:  # an article won't have both snippet and html text
             self.write_item_to_json(item)
                 
     def get_snippet_req(self, response, snip_id, meta):
@@ -181,15 +213,20 @@ class SeattleTimesSpider(scrapy.Spider):
             else:
                 self.write_item_to_json()
         else:
-            # we're done!
+            # all snippet reqs done!
             self.write_item_to_json(item)
 
     def write_item_to_json(self, item):
         if item.get('text', None) or item.get('image_url', None):
             # import pdb; pdb.set_trace()
-            fn = '/opt/arthackerasure/data/out/{}'.format(settings.SPIDERS_OUTPUT_FILES[self.name])
+            addr_num_part = item["address"].split(' ')[0]  # house number
+            if item.get('text', None) and addr_num_part not in item.get('text'):
+                log.info('no address match found in text from Seattle Times for {}'.format(item['address']))
+                return
+
+            fn = '{}/data/out/{}'.format(PROJECT_BASE_PATH, settings.SPIDERS_OUTPUT_FILES[self.name])
             save_item = {item["address"][0]:dict(item)}
-            with open(fn, 'w') as f:
-                f.write(json.dumps(save_item))
+            with open(fn, 'a') as f:
+                f.write(json.dumps(save_item)+",\n\n")
         else:
             log.info('nothing found in Seattle Times for {}'.format(item['address']))

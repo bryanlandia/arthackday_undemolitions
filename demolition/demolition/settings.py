@@ -18,9 +18,10 @@ SPIDERS_OUTPUT_FILES = {
 	"demolition_seattletimes": "seatimes.json",
 }
 
+PROJECT_BASE_PATH = '/opt/arthackerasure'
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-USER_AGENT = 'arthackday-demolition (+http://www.woollyandwise.com)'
+USER_AGENT = 'arthackday-undemolition (+http://www.woollyandwise.com)'
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = False

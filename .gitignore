@@ -88,3 +88,6 @@ env
 
 # Rope project settings
 .ropeproject
+
+# project-specific
+auth.json
