@@ -219,7 +219,7 @@ class SeattleTimesSpider(scrapy.Spider):
     def write_item_to_json(self, item):
         if item.get('text', None) or item.get('image_url', None):
             # import pdb; pdb.set_trace()
-            addr_num_part = item["address"].split(' ')[0]  # house number
+            addr_num_part = item["address"][0].split(' ')[0]  # house number
             if item.get('text', None) and addr_num_part not in item.get('text'):
                 log.info('no address match found in text from Seattle Times for {}'.format(item['address']))
                 return
