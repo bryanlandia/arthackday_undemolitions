@@ -1,0 +1,36 @@
+from setuptools import setup, find_packages
+import sys, os
+
+here = os.path.abspath(os.path.dirname(__file__))
+README = open(os.path.join(here, 'README.md')).read()
+
+version = '0.1'
+
+install_requires = [
+    # List your project dependencies here.
+    # For more details, see:
+    # http://packages.python.org/distribute/setuptools.html#declaring-dependencies
+]
+
+
+setup(name='undemolition',
+    version=version,
+    description="Flask based project to display visual history of impending demolitions in Seattle",
+    long_description=README,
+    classifiers=[
+      # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers
+    ],
+    keywords='Seattle Flask',
+    author='Bryan Wilson',
+    author_email='bryan@woollyandwise.com',
+    url='github.com/bryanlandia',
+    license='GPL',
+    packages=find_packages('src'),
+    package_dir = {'': 'src'},include_package_data=True,
+    zip_safe=False,
+    install_requires=install_requires,
+    entry_points={
+        'console_scripts':
+            ['undemolition=undemolition:main']
+    }
+)

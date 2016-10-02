@@ -10,6 +10,7 @@ import scrapy
 
 class DemolitionItem(scrapy.Item):
     # we can have duplicates for given address, lat, lon
+    permit_id = scrapy.Field()
     address = scrapy.Field()
     lat = scrapy.Field()
     lon = scrapy.Field()

@@ -4,9 +4,12 @@ import logging
 import re
 import urllib
 
+import requests
+
 import scrapy
 from scrapy import loader
-import requests
+
+# from scrapy_redis.spiders import RedisSpider
 
 from demolition import settings
 from demolition import items
@@ -123,7 +126,8 @@ class SeattleTimesSpider(scrapy.Spider):
                                         meta={"address": site['address'],
                                               "lat": site['location']['latitude'],
                                               "lon": site['location']['longitude'],
-                                              "address_variant": address_variant 
+                                              "address_variant": address_variant,
+                                              "permit_id": site=['application_permit_number']
                                         })
                     requests.append(req)
 
@@ -151,6 +155,7 @@ class SeattleTimesSpider(scrapy.Spider):
         # i.add_value('address_variant', response.meta["address_variant"])
         i.replace_value('lat', response.meta["lat"])
         i.replace_value('lon', response.meta["lon"])
+        i.replace_value('permit_id', response.meta["permit_id"])
         item = i.load_item()
         item['image_url'] = []
 

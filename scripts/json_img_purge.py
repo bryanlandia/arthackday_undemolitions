@@ -12,6 +12,7 @@ except ImportError:
 import requests
 import pytesseract
 
+
 NEWSBANKHEADERS = {
     "Host": "infoweb.newsbank.com.ezproxy.spl.org:2048",
 }
@@ -22,7 +23,7 @@ NEWSBANKCOOKIES = {
     "bc_language": "en-US",
     "bc_barcode": "1000010466257",
     "ezproxy": "fCmTiRcjErjLRxU",
-    "has_js": "1",
+    "has_js": "0",
 }
 
 
@@ -49,13 +50,16 @@ def process_json():
 
             # download the images
             for i, url in enumerate(addr['image_url']):
+                print('testing image at url: {}\n'.format(url))    
                 if not url.startswith("http://IHW") or url in ocred_urls:
                     # not a real image
+                    print('{} already OCRed'.format(url))
                     continue
-                resp = requests.get(url, headers=NEWSBANKHEADERS, cookies=NEWSBANKCOOKIES)
+
+                resp = requests.get(url, headers=NEWSBANKHEADERS, cookies=NEWSBANKCOOKIES)  # NEWSBANK headers/cookies not needed for images
                 if resp.status_code == requests.codes.ok:
                     # ocr it for the house number of the address
-                    print('trying image at {}\n'.format(url))
+                    print('OCRing image at {}\n'.format(url))
                     try:
                         img = Image.open(StringIO(resp.content))
                     except IOError:
